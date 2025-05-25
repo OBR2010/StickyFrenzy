@@ -4,10 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StickyFrenzy</title>
-    <link rel="icon" type="image/png" sizes="32x32" href="/storage/favicon-32x32.png">
-    <link rel="shortcut icon" href="/storage/favicon.ico">
-
+    <title>Sticky Notes</title>
     <style>
         * {
             margin: 0;
@@ -73,6 +70,58 @@
             overflow: hidden;
         }
         
+        .sticky-note::before {
+            content: '';
+            position: absolute;
+            top: -5px;
+            right: 10px;
+            width: 20px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.7);
+            transform: rotate(45deg);
+            border-radius: 2px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            z-index: 1;
+        }
+        
+        .sticky-note::after {
+            content: '';
+            position: absolute;
+            top: -3px;
+            left: 15px;
+            width: 15px;
+            height: 15px;
+            background: rgba(255, 255, 255, 0.6);
+            transform: rotate(-30deg);
+            border-radius: 1px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            z-index: 1;
+        }
+        
+        .sticky-note:hover::before {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        .page-curl {
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            width: 20px;
+            height: 20px;
+            background: linear-gradient(135deg, transparent 50%, rgba(0, 0, 0, 0.1) 50%);
+            transform: rotate(0deg);
+            transition: all 0.2s ease;
+            pointer-events: none;
+        }
+        
+        .sticky-note:hover .page-curl {
+            width: 25px;
+            height: 25px;
+            bottom: -3px;
+            right: -3px;
+            background: linear-gradient(135deg, transparent 45%, rgba(0, 0, 0, 0.15) 50%);
+        }
+        
         .sticky-note:hover {
             transform: scale(1.02);
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
@@ -82,6 +131,49 @@
             transform: rotate(5deg) scale(1.05);
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
             z-index: 1000;
+        }
+        
+        .sticky-note.deleting {
+            animation: crumpleDelete 0.6s ease-in-out forwards;
+        }
+        
+        @keyframes crumpleDelete {
+            0% {
+                transform: rotate(0deg) scale(1);
+            }
+            25% {
+                transform: rotate(-5deg) scale(0.95) skew(-2deg, 1deg);
+            }
+            50% {
+                transform: rotate(10deg) scale(0.8) skew(3deg, -2deg);
+            }
+            75% {
+                transform: rotate(-15deg) scale(0.5) skew(-5deg, 3deg);
+            }
+            100% {
+                transform: rotate(20deg) scale(0) skew(10deg, -5deg);
+                opacity: 0;
+            }
+        }
+        
+        .wind-effect {
+            animation: windFlutter 3s ease-in-out infinite;
+        }
+        
+        @keyframes windFlutter {
+            0%,
+            100% {
+                transform: rotate(0deg);
+            }
+            25% {
+                transform: rotate(0.5deg) translateY(-1px);
+            }
+            50% {
+                transform: rotate(-0.3deg) translateY(0px);
+            }
+            75% {
+                transform: rotate(0.8deg) translateY(-0.5px);
+            }
         }
         
         .note-header {
@@ -162,6 +254,14 @@
             background-image: linear-gradient(to bottom, transparent 0px, transparent 19px, rgba(0, 0, 0, 0.1) 20px, rgba(0, 0, 0, 0.1) 21px, transparent 22px);
             background-size: 100% 22px;
             background-position: 0 15px;
+            filter: url('#wobble-filter');
+        }
+        
+        .motivational-placeholder {
+            color: #666;
+            font-style: italic;
+            opacity: 0.7;
+            font-size: 13px;
         }
         
         .instructions {
@@ -205,6 +305,15 @@
 </head>
 
 <body>
+    <!-- SVG Filter for handwriting wobble effect -->
+    <svg style="position: absolute; width: 0; height: 0;" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <filter id="wobble-filter">
+                <feTurbulence baseFrequency="0.02" numOctaves="1" result="noise" />
+                <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.5" />
+            </filter>
+        </defs>
+    </svg>
     <div class="instructions">
         <h3>🗒️ Sticky Notes</h3>
         <ul>
@@ -235,9 +344,24 @@
                     y: 0
                 };
                 this.currentDragElement = null;
+                this.audioContext = null;
+                this.motivationalPrompts = [
+                    "What's your big idea today?",
+                    "Dream it, write it, do it ✨",
+                    "Small steps lead to big changes",
+                    "What are you grateful for?",
+                    "Today's goal: make it happen!",
+                    "Capture that brilliant thought 💡",
+                    "What would make today amazing?",
+                    "Write your story, one note at a time",
+                    "Progress, not perfection 🌟",
+                    "What's inspiring you right now?"
+                ];
 
+                this.initializeAudio();
                 this.initializeStack();
                 this.loadNotes();
+                this.startWindEffect();
             }
 
             initializeStack() {
@@ -271,7 +395,11 @@
                     }
                 });
 
-                document.addEventListener('mouseup', () => {
+                document.addEventListener('mouseup', (e) => {
+                    if (isDraggingStack) {
+                        // If we didn't drag far enough, create a note at click position
+                        this.createNote(e.clientX - 125, e.clientY - 125);
+                    }
                     isDraggingStack = false;
                 });
 
@@ -301,7 +429,12 @@
                     }
                 });
 
-                document.addEventListener('touchend', () => {
+                document.addEventListener('touchend', (e) => {
+                    if (isDraggingStack) {
+                        // If we didn't drag far enough, create a note at touch position
+                        const rect = stack.getBoundingClientRect();
+                        this.createNote(rect.left - 125, rect.top - 125);
+                    }
                     isDraggingStack = false;
                 });
             }
@@ -332,7 +465,8 @@
                     <div class="note-header">
                         <button class="close-btn" onclick="stickyApp.deleteNote('${noteId}')">&times;</button>
                     </div>
-                    <textarea class="note-content" placeholder="Type your note here..."></textarea>
+                    <textarea class="note-content" placeholder="${this.getMotivationalPrompt()}"></textarea>
+                    <div class="page-curl"></div>
                 `;
 
                 document.body.appendChild(noteElement);
@@ -345,7 +479,10 @@
                 setTimeout(() => textarea.focus(), 100);
 
                 // Save content on change
-                textarea.addEventListener('input', () => this.saveNotes());
+                textarea.addEventListener('input', () => {
+                    this.playTypingSound();
+                    this.saveNotes();
+                });
                 textarea.addEventListener('blur', () => this.saveNotes());
 
                 this.notes.push({
@@ -444,13 +581,12 @@
             deleteNote(noteId) {
                 const noteElement = document.getElementById(noteId);
                 if (noteElement) {
-                    noteElement.style.transform += ' scale(0)';
-                    noteElement.style.opacity = '0';
+                    noteElement.classList.add('deleting');
                     setTimeout(() => {
                         noteElement.remove();
                         this.notes = this.notes.filter(note => note.id !== noteId);
                         this.saveNotes();
-                    }, 200);
+                    }, 600);
                 }
             }
 
@@ -509,17 +645,69 @@
                     <div class="note-header">
                         <button class="close-btn" onclick="stickyApp.deleteNote('${noteId}')">&times;</button>
                     </div>
-                    <textarea class="note-content" placeholder="Type your note here...">${noteData.content}</textarea>
+                    <textarea class="note-content" placeholder="${this.getMotivationalPrompt()}">${noteData.content}</textarea>
+                    <div class="page-curl"></div>
                 `;
 
                 document.body.appendChild(noteElement);
                 this.makeDraggable(noteElement);
 
                 const textarea = noteElement.querySelector('.note-content');
-                textarea.addEventListener('input', () => this.saveNotes());
+                textarea.addEventListener('input', () => {
+                    this.playTypingSound();
+                    this.saveNotes();
+                });
                 textarea.addEventListener('blur', () => this.saveNotes());
 
                 this.notes.push(noteData);
+            }
+
+            initializeAudio() {
+                try {
+                    this.audioContext = new(window.AudioContext || window.webkitAudioContext)();
+                } catch (e) {
+                    console.log('Audio not supported');
+                }
+            }
+
+            playTypingSound() {
+                if (!this.audioContext) return;
+
+                try {
+                    const oscillator = this.audioContext.createOscillator();
+                    const gainNode = this.audioContext.createGain();
+
+                    oscillator.connect(gainNode);
+                    gainNode.connect(this.audioContext.destination);
+
+                    oscillator.frequency.setValueAtTime(800 + Math.random() * 200, this.audioContext.currentTime);
+                    oscillator.type = 'sine';
+
+                    gainNode.gain.setValueAtTime(0.02, this.audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + 0.1);
+
+                    oscillator.start(this.audioContext.currentTime);
+                    oscillator.stop(this.audioContext.currentTime + 0.1);
+                } catch (e) {
+                    // Silently fail if audio doesn't work
+                }
+            }
+
+            getMotivationalPrompt() {
+                return this.motivationalPrompts[Math.floor(Math.random() * this.motivationalPrompts.length)];
+            }
+
+            startWindEffect() {
+                setInterval(() => {
+                    const notes = document.querySelectorAll('.sticky-note:not(.dragging)');
+                    if (notes.length > 0 && Math.random() < 0.3) {
+                        const randomNote = notes[Math.floor(Math.random() * notes.length)];
+                        randomNote.classList.add('wind-effect');
+                        setTimeout(() => {
+                            randomNote.classList.remove('wind-effect');
+                        }, 3000);
+                    }
+                }, 8000);
             }
         }
 
