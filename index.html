@@ -98,6 +98,41 @@
             z-index: 1;
         }
         
+        .coffee-stain {
+            position: absolute;
+            border-radius: 50%;
+            opacity: 0.15;
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        .coffee-stain-1 {
+            width: 25px;
+            height: 25px;
+            background: radial-gradient(circle, #8b4513 0%, transparent 70%);
+            top: 60px;
+            right: 30px;
+            transform: rotate(15deg);
+        }
+        
+        .coffee-stain-2 {
+            width: 18px;
+            height: 18px;
+            background: radial-gradient(circle, #a0522d 0%, transparent 60%);
+            bottom: 80px;
+            left: 40px;
+            transform: rotate(-25deg);
+        }
+        
+        .coffee-stain-3 {
+            width: 15px;
+            height: 20px;
+            background: radial-gradient(ellipse, #8b4513 0%, transparent 65%);
+            top: 120px;
+            left: 20px;
+            transform: rotate(45deg);
+        }
+        
         .sticky-note:hover::before {
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
@@ -219,9 +254,54 @@
             width: 100%;
         }
         
+        .note-content.blue-ink {
+            color: #1976d2;
+        }
+        
+        .note-content.red-ink {
+            color: #d32f2f;
+        }
+        
+        .note-content.green-ink {
+            color: #388e3c;
+        }
+        
+        .note-content.purple-ink {
+            color: #7b1fa2;
+        }
+        
+        .note-content.black-ink {
+            color: #212121;
+        }
+        
         .note-content::placeholder {
             color: #888;
             font-style: italic;
+        }
+        
+        .clickable-link {
+            color: #1976d2;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        
+        .clickable-phone {
+            color: #388e3c;
+            text-decoration: underline;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .checkbox-item {
+            display: inline-block;
+            margin-right: 5px;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .checkbox-item.checked {
+            text-decoration: line-through;
+            opacity: 0.6;
         }
         /* Different colored notes */
         
@@ -345,6 +425,7 @@
                 };
                 this.currentDragElement = null;
                 this.audioContext = null;
+                this.inkColors = ['black-ink', 'blue-ink', 'red-ink', 'green-ink', 'purple-ink'];
                 this.motivationalPrompts = [
                     "What's your big idea today?",
                     "Dream it, write it, do it ✨",
@@ -442,6 +523,8 @@
             createNote(x = null, y = null) {
                 const noteId = `note-${this.noteIdCounter++}`;
                 const colorClass = this.colors[Math.floor(Math.random() * this.colors.length)];
+                const inkClass = this.inkColors[Math.floor(Math.random() * this.inkColors.length)];
+                const hasCoffeeStains = Math.random() < 0.4; // 40% chance of coffee stains
 
                 // Random position if not specified
                 if (x === null || y === null) {
@@ -465,8 +548,9 @@
                     <div class="note-header">
                         <button class="close-btn" onclick="stickyApp.deleteNote('${noteId}')">&times;</button>
                     </div>
-                    <textarea class="note-content" placeholder="${this.getMotivationalPrompt()}"></textarea>
+                    <textarea class="note-content ${inkClass}" placeholder="${this.getMotivationalPrompt()}"></textarea>
                     <div class="page-curl"></div>
+                    ${hasCoffeeStains ? this.generateCoffeeStains() : ''}
                 `;
 
                 document.body.appendChild(noteElement);
@@ -479,8 +563,9 @@
                 setTimeout(() => textarea.focus(), 100);
 
                 // Save content on change
-                textarea.addEventListener('input', () => {
+                textarea.addEventListener('input', (e) => {
                     this.playTypingSound();
+                    this.processTextContent(textarea);
                     this.saveNotes();
                 });
                 textarea.addEventListener('blur', () => this.saveNotes());
@@ -490,7 +575,9 @@
                     x: x,
                     y: y,
                     content: '',
-                    color: colorClass
+                    color: colorClass,
+                    inkColor: inkClass,
+                    hasCoffeeStains: hasCoffeeStains
                 });
 
                 this.saveNotes();
@@ -600,7 +687,9 @@
                             x: parseInt(element.style.left),
                             y: parseInt(element.style.top),
                             content: textarea.value,
-                            color: note.color
+                            color: note.color,
+                            inkColor: note.inkColor || 'black-ink',
+                            hasCoffeeStains: note.hasCoffeeStains || false
                         };
                     }
                     return note;
@@ -645,16 +734,19 @@
                     <div class="note-header">
                         <button class="close-btn" onclick="stickyApp.deleteNote('${noteId}')">&times;</button>
                     </div>
-                    <textarea class="note-content" placeholder="${this.getMotivationalPrompt()}">${noteData.content}</textarea>
+                    <textarea class="note-content ${noteData.inkColor || 'black-ink'}" placeholder="${this.getMotivationalPrompt()}">${noteData.content}</textarea>
                     <div class="page-curl"></div>
+                    ${noteData.hasCoffeeStains ? this.generateCoffeeStains() : ''}
                 `;
 
                 document.body.appendChild(noteElement);
                 this.makeDraggable(noteElement);
 
                 const textarea = noteElement.querySelector('.note-content');
-                textarea.addEventListener('input', () => {
+                this.processTextContent(textarea);
+                textarea.addEventListener('input', (e) => {
                     this.playTypingSound();
+                    this.processTextContent(textarea);
                     this.saveNotes();
                 });
                 textarea.addEventListener('blur', () => this.saveNotes());
@@ -708,6 +800,58 @@
                         }, 3000);
                     }
                 }, 8000);
+            }
+
+            generateCoffeeStains() {
+                const stains = ['coffee-stain-1', 'coffee-stain-2', 'coffee-stain-3'];
+                const numStains = Math.floor(Math.random() * 2) + 1; // 1-2 stains
+                let stainHTML = '';
+
+                for (let i = 0; i < numStains; i++) {
+                    const stainClass = stains[Math.floor(Math.random() * stains.length)];
+                    stainHTML += `<div class="coffee-stain ${stainClass}"></div>`;
+                }
+
+                return stainHTML;
+            }
+
+            processTextContent(textarea) {
+                let content = textarea.value;
+
+                // URL detection and linking
+                const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+                content = content.replace(urlRegex, '<span class="clickable-link" onclick="window.open(\'$1\', \'_blank\')">$1</span>');
+
+                // Phone number detection
+                const phoneRegex = /(\+?1?[-.\s]?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4})/g;
+                content = content.replace(phoneRegex, '<span class="clickable-phone" onclick="window.open(\'tel:$1\')">$1</span>');
+
+                // Checkbox creation
+                content = content.replace(/^- \[ \]/gm, '<span class="checkbox-item" onclick="stickyApp.toggleCheckbox(this)">☐</span>');
+                content = content.replace(/^- \[x\]/gm, '<span class="checkbox-item checked" onclick="stickyApp.toggleCheckbox(this)">☑</span>');
+
+                // Only update if content changed to avoid cursor jumping
+                if (textarea.innerHTML !== content && (content.includes('clickable-') || content.includes('checkbox-'))) {
+                    const cursorPos = textarea.selectionStart;
+                    textarea.innerHTML = content;
+                    // Restore cursor position (best effort)
+                    try {
+                        textarea.setSelectionRange(cursorPos, cursorPos);
+                    } catch (e) {
+                        // Ignore cursor position errors
+                    }
+                }
+            }
+
+            toggleCheckbox(element) {
+                if (element.classList.contains('checked')) {
+                    element.classList.remove('checked');
+                    element.textContent = '☐';
+                } else {
+                    element.classList.add('checked');
+                    element.textContent = '☑';
+                }
+                this.saveNotes();
             }
         }
 
